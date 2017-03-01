@@ -1,16 +1,16 @@
 imports:
 - path: create-vm.py
 
-Resources:
-- Name: vm1
-  type: create-vm.py
-  properties:
-    zone: us-central1-a
-    machinetype: n1-standard-2
-    image: https://www.googleapis.com/compute/v1/projects/Albatross-KevinG-Sandbox/adlib-management-sql-image
-- Name: vm2
-  type: create-vm.py
-  properties:
-    zone: us-central1-a
-    machinetype: n1-standard-2
-    image: https://www.googleapis.com/compute/v1/projects/Albatross-KevinG-Sandbox/adlib-management-sql-image
+resources:
+  - Name: vm1
+    type: create-vm.py
+    properties:
+      zone: us-central1-a
+      machinetype: n1-standard-2
+      image: https://www.googleapis.com/compute/v1/projects/Albatross-KevinG-Sandbox/adlib-management-sql-image
+  - Name: vm2
+    type: create-vm.py
+    properties:
+      zone: us-central1-a
+      machinetype: n1-standard-2
+      image: https://www.googleapis.com/compute/v1/projects/Albatross-KevinG-Sandbox/adlib-management-sql-image
