@@ -1,6 +1,6 @@
 def GenerateConfig(context):
   
-  resources = [{
+  resources = {
     'type': 'compute.v1.instance',
     'name': 'vm-' + context.properties['function'],
     'properties': {
@@ -8,6 +8,6 @@ def GenerateConfig(context):
           'machineType': context.properties['machinetype'],
           'image': context.properties['image'],
     }
-  }]
+  }
   return {'resources': resources}
       
