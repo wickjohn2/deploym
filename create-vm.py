@@ -5,7 +5,7 @@ def GenerateConfig(context):
     'name': 'vm-' + context.properties['function'],
     'properties': {
           'zone': context.properties['zone'],
-          'machine-type': context.properties['machinetype'],
+          'machineType': context.properties['machinetype'],
           'image': context.properties['image'],
     }
   }]
