@@ -1,5 +1,6 @@
 imports:
 - path: regional_igm.py
+- path: create_vm.py
 
 resources:
 - name: transformation_engine
