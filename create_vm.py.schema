@@ -1,0 +1,16 @@
+info:
+  title: Single VM
+  author: Google Inc.
+  description: Creates a vm from image.
+
+required:
+  - zone
+  - machineType
+
+properties:
+  zone:
+    description: Zone to create the resources in.
+    type: string
+  machineType:
+    description: Machine type used in VM creation.
+    type: string
