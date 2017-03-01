@@ -5,12 +5,14 @@ resources:
   - name: vm1
     type: create-vm.py
     properties:
+      function: db
       zone: us-central1-a
       machinetype: n1-standard-2
       image: https://www.googleapis.com/compute/v1/projects/Albatross-KevinG-Sandbox/adlib-management-sql-image
   - name: vm2
     type: create-vm.py
     properties:
+      function: win
       zone: us-central1-a
       machinetype: n1-standard-2
       image: https://www.googleapis.com/compute/v1/projects/Albatross-KevinG-Sandbox/adlib-management-sql-image
