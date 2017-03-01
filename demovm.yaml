@@ -1,7 +1,7 @@
 import:
 - path: create-vm.py
 
-Resources
+Resources:
 - Name vm1
   type create-vm.py
   properties:
