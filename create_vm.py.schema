@@ -11,6 +11,3 @@ properties:
   zone:
     description: Zone to create the resources in.
     type: string
-  machineType:
-    description: Machine type used in VM creation.
-    type: string
