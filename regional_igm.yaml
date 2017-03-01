@@ -8,3 +8,8 @@ resources:
     region: us-central1
     minSize: 3
     maxSize: 12
+- name: management_sql
+  type: create_vm.py
+  properties:
+    zone: us-central1-a
+    machineType: n1-standard-4
