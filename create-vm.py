@@ -1,6 +1,6 @@
 def GenerateConfig(context):
   
-  resources {
+  resources = {
     'type': 'compute.v1.instance'
     'name': context.name
     'properties': {
