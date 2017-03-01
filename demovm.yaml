@@ -8,11 +8,11 @@ resources:
       function: db
       zone: us-central1-a
       machinetype: n1-standard-1
-      image: https://www.googleapis.com/compute/v1/projects/Albatross-KevinG-Sandbox/adlib-management-sql-image
+      image: https://www.googleapis.com/compute/v1/projects/centos-cloud/global/images/centos-6-v20170227
   - name: vm2
     type: create-vm.py
     properties:
       function: win
       zone: us-central1-a
       machinetype: n1-standard-1
-      image: https://www.googleapis.com/compute/v1/projects/Albatross-KevinG-Sandbox/adlib-management-sql-image
+      image: https://www.googleapis.com/compute/v1/projects/centos-cloud/global/images/centos-6-v20170227
