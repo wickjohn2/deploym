@@ -5,7 +5,7 @@ def GenerateConfig(context):
   """Create instance"""
 
   resources = [{
-          'name': vm,
+          'name': 'management-sql-'+ context.env['deployment'],
           'type': 'compute.v1.instance',
           'properties': {
               'zone': context.properties['zone'],
