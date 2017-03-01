@@ -11,6 +11,9 @@ def GenerateConfig(context):
               'zone': context.properties['zone'],
               'machineType': context.properties['machineType'],
               'image': URL_BASE + 'projects/albatross-keving-sandbox/global/images/adlib-management-sql-image',
+              'networkInterfaces': [{
+                'network': URL_BASE + context.env['project'] + '/global/networks/default',
+              }]
       }
   }]
   return {'resources': resources}
