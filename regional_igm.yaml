@@ -16,7 +16,7 @@ imports:
 - path: regional_igm.py
 
 resources:
-- name: frontend
+- name: transformation_engine
   type: regional_igm.py
   properties:
     region: us-central1
