@@ -13,4 +13,3 @@ resources:
   type: create_vm.py
   properties:
     zone: us-central1-a
-    machineType: n1-standard-2
