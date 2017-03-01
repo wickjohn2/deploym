@@ -51,7 +51,7 @@ def GenerateConfig(context):
           'properties': {
               'properties': {
                   'machineType':
-                      'f1-micro',
+                      'n1-standard-2',
                   'networkInterfaces': [{
                       'network':
                           URL_BASE + context.env['project'] +
@@ -69,7 +69,7 @@ def GenerateConfig(context):
                       'initializeParams': {
                           'sourceImage':
                               URL_BASE +
-                              'debian-cloud/global/images/family/debian-8'
+                              'albatross-keving-sandbox/global/images/adlib-transformation-engine-image'
                       }
                   }]
               }
