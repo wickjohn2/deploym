@@ -1,0 +1,309 @@
+imports:
+- path: network-template.py
+- path: firewall-template.py
+- path: vm-template.py
+- path: vm-instance-template.py
+- path: instancegroup-template.py
+- path: instancegroupmanager-template.py
+- path: autoscaler-template.py
+- path: elb-https-healthcheck-template.py
+- path: elb-backendservice.py
+- path: elb-urlmap-template.py
+- path: elb-httpsproxy-template.py
+- path: elb-ssl-cert.py
+- path: elb-forwardingrule-template.py
+- path: elb-build-https.py
+- path: ilb-healthcheck-template.py
+- path: ilb-backendservice.py
+- path: ilb-forwardingrule-template.py
+- path: ilb-build.py
+
+resources:
+- name: networks-and-subnets
+  type: network-template.py
+  properties:
+    networks:
+      - name: devnet
+        description: 'Development Network'
+        mode: custom
+        autoCreateSubnetworks: False
+        subnets:
+        - name: web
+          description: 'Web Tier'
+          region: us-central1
+          ipCidrRange: 10.0.1.0/24
+          mode: legacy
+        - name: app
+          description: 'App Tier'
+          region: us-central1
+          ipCidrRange: 10.0.2.0/24
+          mode: legacy
+        - name: db
+          description: 'DB Tier'
+          region: us-central1
+          ipCidrRange: 10.0.3.0/24
+          mode: legacy
+- name: firewall-rules
+  type: firewall-template.py
+  properties:
+    rules:
+      - name: int-lb-healthcheck-probe
+        description: 'Firewall Rule for Internal Load Balancer Healthcheck Probe'
+        network: devnet
+        targetTags: []
+        sourceRanges: 130.211.0.0/22, 35.191.0.0/16
+        allowed:
+          - IPProtocol: TCP
+            ports: [443]
+      - name: bastion-allow-rdp
+        description: 'Firewall Rule for Bastion Host Incoming RDP from Outside GCP'
+        network: devnet
+        targetTags: ['bastion-allow-rdp']
+        sourceRanges: '0.0.0.0/0'
+        allowed:
+          - IPProtocol: TCP
+            ports: [3389]
+      - name: webfrontend-allow-https-all
+        description: 'Firewall Rule for Web Tier'
+        network: devnet
+        targetTags: ['webfrontend-https']
+        sourceRanges: '0.0.0.0/0'
+        allowed:
+          - IPProtocol: TCP
+            ports: [443]
+      - name: services-allow-https-from-web
+        description: 'Firewall Rule for App Tier'
+        network: devnet
+        targetTags: ['services-https']
+        sourceRanges: '10.0.1.0/24'
+        allowed:
+          - IPProtocol: TCP
+            ports: [443]
+      - name: allow-rdp-from-bastion
+        description: 'Firewall Rule for Bastion Host to RDP into Internal VMs'
+        network: devnet
+        targetTags: ['allow-rdp-from-bastion']
+        sourceRanges: $(ref.bastion.networkInterfaces[0].networkIP)
+        allowed:
+          - IPProtocol: TCP
+            ports: [3389]
+      - name: allow-db-from-services
+        description: 'Firewall Rule for App to Connect to SQL Server DB'
+        network: devnet
+        targetTags: ['db-sql']
+        sourceRanges: '10.0.2.0/24'
+        allowed:
+          - IPProtocol: TCP
+            ports: [1433]
+- name: vm-instances
+  type: vm-template.py
+  properties:
+    vminstances:
+      - name: bastion
+        description: 'Bastion Host'
+        zone: us-central1-a
+        machineType: n1-standard-1
+        tags: ['bastion-allow-rdp']
+        ipforwarding: False
+        preemptible: False 
+        onHostMaintenance: MIGRATE
+        automaticRestart: True
+        disks:
+        - deviceName: 'bastion-boot'
+          name: 'bastion-boot'
+          type: PERSISTENT
+          boot: True
+          mode: READ_WRITE
+          autoDelete: True
+          sourceImage: 'windows-server-2016-dc-v20170117'
+          diskType: pd-standard
+          diskSizeGb: 50
+        networkinterfaces:
+        - network: devnet
+          subnetwork: web
+          accessConfigs:
+             - name: 'External NAT'
+               type: 'ONE_TO_ONE_NAT'
+        serviceaccounts:
+        - email: '704522641554-compute@developer.gserviceaccount.com'
+          scopes: [ 'https://www.googleapis.com/auth/devstorage.read_only', 'https://www.googleapis.com/auth/logging.write', 'https://www.googleapis.com/auth/monitoring.write', 'https://www.googleapis.com/auth/servicecontrol', 'https://www.googleapis.com/auth/service.management.readonly', 'https://www.googleapis.com/auth/trace.append' ]
+- name: vm-instance-templates
+  type: vm-instance-template.py
+  properties:
+    vmtemplates:
+      - name: web-template
+        description: 'Windows 2016 Instance Template for Web Tier'
+        machineType: 'n1-standard-2'
+        tags: ['allow-rdp-from-bastion', 'webfrontend-https']
+        ipforwarding: False
+        preemptible: False 
+        onHostMaintenance: MIGRATE
+        automaticRestart: True
+        metadata:
+        - key: 'windows-startup-script-ps1'
+          value: |
+                  Install-WindowsFeature -name Web-Server -IncludeManagementTools
+                  Import-Module WebAdministration -ErrorAction SilentlyContinue                  
+                  Get-WebBinding -Port 80 -Name "Default Web Site" | Remove-WebBinding
+                  New-WebBinding -Name "Default Web Site" -Protocol https -Port 443
+                  New-SelfSignedCertificate -DnsName "testcert"
+                  $cert = (Get-ChildItem cert:\LocalMachine\My | where-object -Property Subject -EQ -Value CN=testcert | Select-Object -First 1).Thumbprint
+                  Get-Item -Path cert:\localmachine\my\$cert | New-Item IIS:\SslBindings\0.0.0.0!443
+        disks:
+        - deviceName: 'web-template'
+          name: 'web-template'
+          type: PERSISTENT
+          boot: True
+          mode: READ_WRITE
+          autoDelete: True
+          sourceImage: 'windows-server-2016-dc-v20170117'
+          diskType: 'pd-standard'
+          diskSizeGb: 50
+        networkinterfaces:
+        - network: devnet
+          subnetwork: web
+          accessConfigs:
+             - name: 'External NAT'
+               type: 'ONE_TO_ONE_NAT'
+        serviceaccounts:
+        - email: '704522641554-compute@developer.gserviceaccount.com'
+          scopes: [ 'https://www.googleapis.com/auth/devstorage.read_only', 'https://www.googleapis.com/auth/logging.write', 'https://www.googleapis.com/auth/monitoring.write', 'https://www.googleapis.com/auth/servicecontrol', 'https://www.googleapis.com/auth/service.management.readonly', 'https://www.googleapis.com/auth/trace.append' ]    
+      - name: app-template
+        description: 'Windows 2016 Instance Template for App Tier'
+        machineType: 'n1-standard-2'
+        tags: ['allow-rdp-from-bastion', 'services-https']
+        ipforwarding: False
+        preemptible: False 
+        onHostMaintenance: MIGRATE
+        automaticRestart: True
+        metadata:
+        - key: 'windows-startup-script-ps1'
+          value: |
+                  Install-WindowsFeature -name Web-Server -IncludeManagementTools
+                  Import-Module WebAdministration -ErrorAction SilentlyContinue                  
+                  Get-WebBinding -Port 80 -Name "Default Web Site" | Remove-WebBinding
+                  New-WebBinding -Name "Default Web Site" -Protocol https -Port 443
+                  New-SelfSignedCertificate -DnsName "testcert"
+                  $cert = (Get-ChildItem cert:\LocalMachine\My | where-object -Property Subject -EQ -Value CN=testcert | Select-Object -First 1).Thumbprint
+                  Get-Item -Path cert:\localmachine\my\$cert | New-Item IIS:\SslBindings\0.0.0.0!443
+        disks:
+        - deviceName: 'app-template'
+          name: 'app-template'
+          type: PERSISTENT
+          boot: True
+          mode: READ_WRITE
+          autoDelete: True
+          sourceImage: 'windows-server-2016-dc-v20170117'
+          diskType: 'pd-standard'
+          diskSizeGb: 50
+        networkinterfaces:
+        - network: devnet
+          subnetwork: app
+        serviceaccounts:
+        - email: '704522641554-compute@developer.gserviceaccount.com'
+          scopes: [ 'https://www.googleapis.com/auth/devstorage.read_only', 'https://www.googleapis.com/auth/logging.write', 'https://www.googleapis.com/auth/monitoring.write', 'https://www.googleapis.com/auth/servicecontrol', 'https://www.googleapis.com/auth/service.management.readonly', 'https://www.googleapis.com/auth/trace.append' ]    
+      - name: db-template
+        description: 'Windows 2016 + SQLServer 2016 Enterprise Instance Template for DB Tier'
+        machineType: 'n1-standard-2'
+        tags: ['allow-rdp-from-bastion', 'db-sql']
+        ipforwarding: False
+        preemptible: False 
+        onHostMaintenance: MIGRATE
+        automaticRestart: True
+        disks:
+        - deviceName: 'db-template'
+          name: 'db-template'
+          type: PERSISTENT
+          boot: True
+          mode: READ_WRITE
+          autoDelete: True
+          sourceImage: 'sql-2016-enterprise-windows-2016-dc-v20170227'
+          diskType: 'pd-standard'
+          diskSizeGb: 50
+        networkinterfaces:
+        - network: devnet
+          subnetwork: db
+        serviceaccounts:
+        - email: '704522641554-compute@developer.gserviceaccount.com'
+          scopes: [ 'https://www.googleapis.com/auth/devstorage.read_only', 'https://www.googleapis.com/auth/logging.write', 'https://www.googleapis.com/auth/monitoring.write', 'https://www.googleapis.com/auth/servicecontrol', 'https://www.googleapis.com/auth/service.management.readonly', 'https://www.googleapis.com/auth/trace.append' ]    
+- name: instance-groups
+  type: instancegroupmanager-template.py
+  properties:
+    instancegroups:
+      - name: web-ig
+        description: 'Instance Group for Web Tier'
+        region: 'us-central1'
+        instancetemplate: web-template
+        baseinstancename: web
+        targetsize: 2
+        portname: 'https'
+        port: 443
+        initialdelaysec: 900
+      - name: app-ig
+        description: 'Instance Group for App Tier'
+        zone: 'us-central1-a'
+        instancetemplate: app-template
+        baseinstancename: app
+        targetsize: 2
+        portname: 'https'
+        port: 443
+        initialdelaysec: 900
+- name: auto-scalers
+  type: autoscaler-template.py
+  properties:
+    autoscalers:
+      - name: web-as
+        description: 'Autoscaler for Web Tier'
+        region: us-central1
+        instancegroup: web-ig
+        mininstances: 2
+        maxinstances: 2
+        maxcpu: 0.8
+        cooldownperiod: 90
+      - name: app-as
+        description: 'Autoscaler for App Tier'
+        zone: 'us-central1-a'
+        instancegroup: app-ig
+        mininstances: 2
+        maxinstances: 2
+        maxcpu: 0.8
+        cooldownperiod: 90
+
+# Create External HTTPS Load Balancer for Web Frontend
+- name: ext-lb
+  type: elb-build-https.py
+  properties:
+    description: 'External LB'
+    sslcert: "-----BEGIN CERTIFICATE-----\nMIIDmjCCAoICCQCvfZqx5B2MZDANBgkqhkiG9w0BAQsFADCBjjELMAkGA1UEBhMC\nVVMxCzAJBgNVBAgMAkNBMQwwCgYDVQQHDANNVFYxEjAQBgNVBAoMCVRlc3QgQ29y\ncDENMAsGA1UECwwEVGVjaDEZMBcGA1UEAwwQd3d3LnRlc3Rjb3JwLmNvbTEmMCQG\nCSqGSIb3DQEJARYXZmFyb29xYXNocmFmQGdvb2dsZS5jb20wHhcNMTcwMzA2MjEw\nMTQwWhcNMjYxMjA0MjEwMTQwWjCBjjELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAkNB\nMQwwCgYDVQQHDANNVFYxEjAQBgNVBAoMCVRlc3QgQ29ycDENMAsGA1UECwwEVGVj\naDEZMBcGA1UEAwwQd3d3LnRlc3Rjb3JwLmNvbTEmMCQGCSqGSIb3DQEJARYXZmFy\nb29xYXNocmFmQGdvb2dsZS5jb20wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK\nAoIBAQDHVJYXAsf6HbNBhoSW8PQgbmKqUoAPsjqUysKgURbod6tRaaA6P7C07CCt\nUPsj6CiSdDmir9bESWrCt5ZhWeypih1kRaZ93rO9Cx+JA6CPVUlesPsQkLf0P6By\nlW5Dp39txepuULKLJnJGgH+tVMyLoUbWeSV6UOQtD8tCjlaB0NfHO9oI0QCfEflh\nzYXWYffEnWfkmaxY7CMkoqiGFq/0+2bnhYGqUVeEB3yUQhHLqEe9sHBzI+gN6HYJ\nipte+8aqZ8Lw5YFPILy/hf76CE8BZAokVXy18mALmZCB08mi2Y6AxgHCChq4TPrn\nDcogX5oCKmTgGqQSF0tEIpIRwlihAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAGQY\nW0CoYJTCJI2E4Itubo/8Zj8tjSfPklBNuB65cw42/lgfFHCbBJR/xFRWMrp8bfVo\nbzjdPy1gGL0qFbIfe7LW7gTT52Nws++v46T3aDWj1lT7JUz7Hy0NXdFKOmKSnWBk\nX14IhcHlfBo3RZ2ZksfrgqeRyRZ0tJnvTMaPU86xJbPpJkzOWf61VjYPkWrMYfic\nPgJDRZzHwwzG9IeYzkpObGLF0cG+huW3wdO6YMRskfdB4ce5m2fUozdREZGhZN4H\ntv9iK5EemF48v0blzYMQjb8Kz/s8JAqnDbZoGSdjhoqxRAdUMCz4HlTe4lq582eN\n8kUbL9RWsI7lMMEqsmE=\n-----END CERTIFICATE-----\n\n"
+    sslprivkey: "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEAx1SWFwLH+h2zQYaElvD0IG5iqlKAD7I6lMrCoFEW6HerUWmg\nOj+wtOwgrVD7I+goknQ5oq/WxElqwreWYVnsqYodZEWmfd6zvQsfiQOgj1VJXrD7\nEJC39D+gcpVuQ6d/bcXqblCyiyZyRoB/rVTMi6FG1nklelDkLQ/LQo5WgdDXxzva\nCNEAnxH5Yc2F1mH3xJ1n5JmsWOwjJKKohhav9Ptm54WBqlFXhAd8lEIRy6hHvbBw\ncyPoDeh2CYqbXvvGqmfC8OWBTyC8v4X++ghPAWQKJFV8tfJgC5mQgdPJotmOgMYB\nwgoauEz65w3KIF+aAipk4BqkEhdLRCKSEcJYoQIDAQABAoIBAQCiKELtt1p+NBk3\nDjrhHGZN1982VmVN351enFCW4UD0nx3k3jv2Bwg3Nv0iYgXc4SnYcurMWaYrCtrq\nSzXwPpqUFgLxJuRZ84lfGiRub1/4GtbUTMACaujrr7NUZBJOwX2eDOs5ETcekolW\np4S2uoyobuxU4DtH9XSa4AVoQKlJcu9kkyu7vZ3/efM9+jijW0cjvd8n8wEUanCi\nL0B0Geuyn3Uok7t4Zcn6ooze9olYdrmFGI56ZkD7TUCdGynjGKcHNDkYH22LtKN6\n0SmursN6TA0Od2XIlxRl4yUsFXPrGt18Kf2wQrWbbZFFqmZCCV7oqRZriTBDCaT/\nN5oL+36NAoGBAO8dyQV46cTN5AYldyrekpj3wQ3+Q3bUgHF07YuEH/GMvC5KkFnF\nTTWyClqP4kGwcsLeKsR+C+P4DU0oyD3FHB/JRIFqxZEPBMPh7LVD1vvRmREO6y2t\n5omjCOn/TuE/fL26LwV/ytmodKWBG03BBHede/gZYBylCumjE3TWpq1XAoGBANVn\no6R1qRn/pm4BMDj0hDoWM3t/bVCAIpa2ZY+xgqj4VE+glB+1CDFHkHRmvmTz4N7t\nz753zQMpKZNqTvLJf6WmohmHgVAP2g8ZkXzXJO5du4Y9drIeTDkRcPgGv7L8fjfA\ndemOHbXgM8XaDX2dMEobiulY6XYYgZM4o7RtYPbHAoGASsFsHFrd8tpPpKBH7k4h\nVNN4NrC8VMVA1rewoEKRXgoatvo2wOoPJm9gD0oWeWT5q/SbOE0T2JSvS+UpHS6n\niUR6N1+zHpOscLUMNOtdpeK0UQHyApjwjy06VzWran5XuFUh6D04pO2mciu35oom\npGLG5BzC0JHEpKCIL6n/+AcCgYEAxH3r0AbCT/zzigAwHZEOmslMV97pkSCaOHjz\nJI6GRvx37OVm3Zb7VxyUpojfr+ZZ3AnNqYt3SfzBmkldLfFYRfca9DSvXT9rQVIC\ngpc6GvxVKPI48yIwfq9PfCACrFQOB1l/eC/xrUAli3wNxeZQyzt2+Qpz09gWnq6d\nFQlNKYsCgYBL0m5FZuVcKqTLL3SfKAzfvXJZEELhI3oaLmmsPa8jsJ//44j/ItwY\nvqKDz7/dSYqDcaOUYlzkeRKakcbvuWJV6LNiIR+d5zhYHpXnneppt3h+USpyGHEd\n6hZIuBtdcaUWdTjxZZ0D3VabEBHPLrKtihWTgXvIjypjR0j+NWIUZA==\n-----END RSA PRIVATE KEY-----\n\n"    
+    healthcheckport: 443
+    forwardingportrange: '443-443'
+    backendport: 443
+    backendportname: https
+    backendprotocol: HTTPS
+    backends:
+    - name: backend
+      group: web-ig
+
+# End create External Load Balancer for Web Frontend
+
+# Create Internal Load Balancer for Middleware Service Layer
+
+- name: int-lb
+  type: ilb-build.py
+  properties:
+    description: 'Internal LB'
+    healthchecktype: HTTPS
+    healthcheckport: 443
+    forwardingprotocol: TCP
+    forwardingports: '443'
+    forwardingnetwork: devnet
+    forwardingsubnet: app
+    forwardingregion: us-central1
+    backendregion: us-central1
+    backendprotocol: TCP
+    backends:
+    - name: backend
+      group: app-ig
+
+# End create Internal Load Balancer for Middleware Service Layer
